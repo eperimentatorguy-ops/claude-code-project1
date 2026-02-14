@@ -1,0 +1,166 @@
+{
+  "name": "Poet Email Agent - Famous Author Born This Month",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Get a Poem",
+        "formDescription": "Submit your email to receive a poem from a famous author born this month!",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Email",
+              "fieldType": "email",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Name",
+              "fieldType": "text",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "form-trigger",
+      "name": "Form Trigger",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.2,
+      "position": [220, 300],
+      "webhookId": "poet-email-form"
+    },
+    {
+      "parameters": {
+        "jsCode": "const monthNames = [\n  'January', 'February', 'March', 'April', 'May', 'June',\n  'July', 'August', 'September', 'October', 'November', 'December'\n];\n\nconst now = new Date();\nconst currentMonth = monthNames[now.getMonth()];\n\nreturn [{\n  json: {\n    currentMonth: currentMonth,\n    recipientEmail: $input.first().json['Email'],\n    recipientName: $input.first().json['Name']\n  }\n}];"
+      },
+      "id": "get-month",
+      "name": "Get Current Month",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=The current month is {{ $json.currentMonth }}. The recipient's name is {{ $json.recipientName }}.\n\nYour task:\n1. Identify a famous poet or author who was born in {{ $json.currentMonth }}.\n2. Select one of their well-known poems (or a short excerpt if the poem is long).\n3. Return your response in EXACTLY this format (no extra text outside this structure):\n\nAUTHOR: [Author full name]\nBORN: [Birth date, e.g. February 12, 1809]\nPOEM_TITLE: [Title of the poem]\nPOEM:\n[The full poem or excerpt]\n\nFUN_FACT: [One interesting fact about the author]",
+        "options": {
+          "systemMessage": "You are a literary expert who specializes in poetry and famous authors. You know the birth dates of famous poets and authors throughout history. Always provide accurate, real poems from real authors. Never fabricate poems or misattribute them. If providing an excerpt, note that it is an excerpt."
+        }
+      },
+      "id": "ai-agent",
+      "name": "AI Agent - Find Poet & Poem",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "openai-model",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [720, 520],
+      "credentials": {
+        "openAiApi": {
+          "id": "",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const agentOutput = $input.first().json.output;\n\nconst authorMatch = agentOutput.match(/AUTHOR:\\s*(.+)/);\nconst bornMatch = agentOutput.match(/BORN:\\s*(.+)/);\nconst titleMatch = agentOutput.match(/POEM_TITLE:\\s*(.+)/);\nconst poemMatch = agentOutput.match(/POEM:\\s*([\\s\\S]*?)(?=\\nFUN_FACT:|$)/);\nconst funFactMatch = agentOutput.match(/FUN_FACT:\\s*(.+)/);\n\nconst author = authorMatch ? authorMatch[1].trim() : 'Unknown Author';\nconst born = bornMatch ? bornMatch[1].trim() : '';\nconst poemTitle = titleMatch ? titleMatch[1].trim() : 'Untitled';\nconst poem = poemMatch ? poemMatch[1].trim() : agentOutput;\nconst funFact = funFactMatch ? funFactMatch[1].trim() : '';\n\nconst previousData = $('Get Current Month').first().json;\n\nreturn [{\n  json: {\n    recipientEmail: previousData.recipientEmail,\n    recipientName: previousData.recipientName,\n    currentMonth: previousData.currentMonth,\n    author: author,\n    born: born,\n    poemTitle: poemTitle,\n    poem: poem,\n    funFact: funFact\n  }\n}];"
+      },
+      "id": "parse-response",
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [940, 300]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.recipientEmail }}",
+        "subject": "=Your {{ $json.currentMonth }} Poem: \"{{ $json.poemTitle }}\" by {{ $json.author }}",
+        "emailType": "html",
+        "message": "=<div style=\"font-family: Georgia, 'Times New Roman', serif; max-width: 600px; margin: 0 auto; padding: 20px;\">\n  <div style=\"background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 12px 12px 0 0; text-align: center;\">\n    <h1 style=\"color: #ffffff; margin: 0; font-size: 24px;\">Your {{ $json.currentMonth }} Poem</h1>\n    <p style=\"color: #e8e0f0; margin: 8px 0 0 0; font-size: 14px;\">A literary gift, just for you</p>\n  </div>\n  \n  <div style=\"background: #fefefe; padding: 30px; border: 1px solid #e8e0f0; border-top: none;\">\n    <p style=\"color: #444; font-size: 16px;\">Dear {{ $json.recipientName }},</p>\n    \n    <p style=\"color: #555; font-size: 15px; line-height: 1.6;\">\n      This month we celebrate <strong>{{ $json.author }}</strong>, born on <em>{{ $json.born }}</em>.\n      Here is one of their beloved works:\n    </p>\n    \n    <div style=\"background: #f9f7fc; border-left: 4px solid #764ba2; padding: 20px 24px; margin: 24px 0; border-radius: 0 8px 8px 0;\">\n      <h2 style=\"color: #764ba2; margin: 0 0 16px 0; font-size: 20px;\">{{ $json.poemTitle }}</h2>\n      <p style=\"color: #333; font-size: 15px; line-height: 1.8; white-space: pre-line; margin: 0;\">{{ $json.poem }}</p>\n    </div>\n    \n    <div style=\"background: #fff8e1; padding: 16px; border-radius: 8px; margin: 20px 0;\">\n      <p style=\"color: #666; font-size: 14px; margin: 0;\"><strong>Did you know?</strong> {{ $json.funFact }}</p>\n    </div>\n  </div>\n  \n  <div style=\"background: #f0edf5; padding: 16px; border-radius: 0 0 12px 12px; text-align: center; border: 1px solid #e8e0f0; border-top: none;\">\n    <p style=\"color: #888; font-size: 12px; margin: 0;\">Sent with love by the Poet Email Agent</p>\n  </div>\n</div>",
+        "options": {}
+      },
+      "id": "send-email",
+      "name": "Send Poem Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.2,
+      "position": [1180, 300],
+      "credentials": {
+        "smtp": {
+          "id": "",
+          "name": "SMTP"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Form Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Current Month",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Current Month": {
+      "main": [
+        [
+          {
+            "node": "AI Agent - Find Poet & Poem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent - Find Poet & Poem": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent - Find Poet & Poem",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Send Poem Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0
+}
