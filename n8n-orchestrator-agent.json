@@ -1,0 +1,203 @@
+{
+  "name": "Orchestrator Agent - Project Manager",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "chat-trigger",
+      "name": "Chat Trigger",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [220, 300],
+      "webhookId": "orchestrator-chat"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.chatInput }}",
+        "options": {
+          "systemMessage": "You are an expert Project Manager and Orchestrator Agent. Your role is to:\n\n1. **Acquire the Goal**: Understand the user's objective clearly. If the goal is ambiguous, ask clarifying questions before proceeding.\n\n2. **Decompose the Work**: Break the goal into actionable tasks that map to your available sub-agents:\n   - **Research Agent**: Use this for gathering information, data collection, market research, competitor analysis, trend identification, fact-finding, and any investigative tasks.\n   - **Strategy Agent**: Use this for strategic planning, recommendations, action plans, frameworks, positioning, prioritization, and decision-making guidance.\n\n3. **Coordinate Execution**: Decide the order of operations. Typically you should:\n   - Call the Research Agent first to gather the necessary data and context.\n   - Then call the Strategy Agent with the research findings to produce an informed strategy.\n   - You may call agents multiple times or in different orders depending on the task.\n\n4. **Synthesize & Deliver**: Combine the outputs from all sub-agents into a single, coherent, well-structured deliverable for the user. Your final output should:\n   - Start with an executive summary.\n   - Present findings and strategy in a logical flow.\n   - Include clear action items or recommendations when applicable.\n   - Be professional, concise, and actionable.\n\n**Rules:**\n- Always use the tools available to you. Do not try to do research or strategy yourself — delegate to the appropriate agent.\n- If a sub-agent returns insufficient results, refine the query and try again.\n- Maintain a professional, project-manager tone throughout.\n- Track what has been done and what remains, keeping the user informed of progress.\n- When presenting the final deliverable, clearly attribute which insights came from research vs. strategy."
+        }
+      },
+      "id": "orchestrator-agent",
+      "name": "Orchestrator Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "model": "claude-sonnet-4-20250514",
+        "options": {
+          "maxTokensToSample": 4096,
+          "temperature": 0.3
+        }
+      },
+      "id": "anthropic-model",
+      "name": "Anthropic Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.2,
+      "position": [380, 520],
+      "credentials": {
+        "anthropicApi": {
+          "id": "",
+          "name": "Anthropic API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "name": "research_agent",
+        "description": "Call the Research Agent to gather information, conduct research, collect data, perform market analysis, find facts, identify trends, or investigate any topic. Send a clear research brief describing what information is needed and why. The agent will return structured research findings.",
+        "workflowId": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "fields": {
+          "values": [
+            {
+              "name": "task",
+              "description": "The research task or question to investigate",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "context",
+              "description": "Additional context or constraints for the research",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "depth",
+              "description": "Level of detail needed: 'quick' for a brief overview, 'standard' for normal depth, 'deep' for comprehensive analysis",
+              "type": "string",
+              "required": false
+            }
+          ]
+        }
+      },
+      "id": "tool-research-agent",
+      "name": "Research Agent Tool",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2,
+      "position": [520, 520]
+    },
+    {
+      "parameters": {
+        "name": "strategy_agent",
+        "description": "Call the Strategy Agent to develop strategic plans, recommendations, frameworks, action plans, or decision guidance. Provide the strategy brief along with any research findings or context that should inform the strategy. The agent will return a structured strategic plan.",
+        "workflowId": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "fields": {
+          "values": [
+            {
+              "name": "objective",
+              "description": "The strategic objective or question to address",
+              "type": "string",
+              "required": true
+            },
+            {
+              "name": "research_findings",
+              "description": "Research data and findings that should inform the strategy",
+              "type": "string",
+              "required": false
+            },
+            {
+              "name": "constraints",
+              "description": "Any constraints, budget limitations, timelines, or requirements to consider",
+              "type": "string",
+              "required": false
+            }
+          ]
+        }
+      },
+      "id": "tool-strategy-agent",
+      "name": "Strategy Agent Tool",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2,
+      "position": [660, 520]
+    },
+    {
+      "parameters": {
+        "sessionIdType": "fromInput",
+        "contextWindowLength": 20
+      },
+      "id": "memory-buffer",
+      "name": "Window Buffer Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [800, 520]
+    }
+  ],
+  "connections": {
+    "Chat Trigger": {
+      "main": [
+        [
+          {
+            "node": "Orchestrator Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Orchestrator Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Research Agent Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "Orchestrator Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Strategy Agent Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "Orchestrator Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Window Buffer Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "Orchestrator Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0
+}
